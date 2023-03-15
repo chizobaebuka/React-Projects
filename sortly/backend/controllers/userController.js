@@ -2,6 +2,10 @@ const asyncHandler = require("express-async-handler");
 const User = require("../models/userModels");
 const jwt = require("jsonwebtoken");
 const bcrypt = require("bcryptjs");
+const Token = require("../models/tokenModel");
+const crypto = require("crypto");
+const sendEmail = require("../utils/sendemail");
+
 
 const generateToken = (id) => {
     return jwt.sign({id}, process.env.JWT_SECRET, {expiresIn: "1d"});
@@ -209,7 +213,65 @@ const changePassword = asyncHandler(async(req, res) => {
 
 });
 
+const forgotPassword = asyncHandler(async(req, res) => {
+    const {email} = req.body;
+    const user = await User.findOne({email})
 
+    if(!user){
+        res.status(404);
+        throw new Error("User not found");
+    }
+
+    // Delete token if it exists in DB
+    let token = await Token.findOne({userId: user._id});
+    if(token){
+        await token.deleteOne()
+    }
+    // create reset token
+    let resetToken = crypto.randomBytes(32).toString("hex") + user._id;
+
+    // Hash Token before saving to DB
+    const hashedToken = crypto
+        .createHash("sha256")
+        .update(resetToken)
+        .digest("hex");
+        
+    // save token to DB
+    await new Token({
+        userId: user._id,
+        token: hashedToken,
+        createdAt: Date.now(),
+        expiresAt: Date.now() + 30 (60 * 1000) //Thirty minutes
+    }).save()
+
+    // construct Reset Url
+    const resetUrl = `${process.env.FRONTEND_URL}/resetpassword/${resetToken}`
+    
+
+    // reset Email
+    const message = `
+        <h2>Hello ${user.name}</h2>
+        <p>Please use the url below to reset your password</p>
+        <p>Reset link is valid for 30mins</p>
+        
+        <a href=${resetUrl} clicktracking=off>${resetUrl}</a>
+
+        <p>Regards...</p>
+        <p>Sortly Team</p>
+    `;
+
+    const subject = "Password Reset Request"
+    const send_to = user.email
+    const sent_from = process.env.EMAIL_USER
+
+    try{
+        await sendEmail(subject, message, send_to, sent_from)
+        res.status(200).json({success: true, message: "Reset Email Sent"})
+    }catch (error){
+        res.status(500);
+        throw new Error("Email not sent. Please try again");
+    }
+});
 
 
 module.exports = {
@@ -220,4 +282,5 @@ module.exports = {
     loginStatus,
     updateUser,
     changePassword,
+    forgotPassword,
 };
