@@ -149,6 +149,11 @@ const loginStatus = asyncHandler(async(req, res) => {
     }
     return res.json(false)
 });
+
+// update user
+const updateUser = asyncHandler(async(req, res) => {
+    res.send("user updated");
+});
     
 module.exports = {
     registerUser,
@@ -156,4 +161,5 @@ module.exports = {
     logout,
     getUser,
     loginStatus,
+    updateUser,
 };
